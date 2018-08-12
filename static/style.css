@@ -1,0 +1,39 @@
+body {
+    overflow-y: scroll;
+}
+
+#canvas-container {
+    overflow: hidden;
+    width: 360px;
+    height: 360px;
+
+    /* http://lea.verou.me/css3patterns/#diagonal-stripes */
+    background-color: #aaa;
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(255,255,255,.5) 20px, rgba(255,255,255,.5) 40px);
+}
+
+#output-canvas {
+    display: block;
+    width: 2048px;
+    height: 2048px;
+    position: relative;
+    transform-origin: top left;
+    overflow: hidden;
+    background-clip: padding-box;
+}
+
+#output-canvas > * {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+#output-canvas-background {
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+}
+
+#output-canvas-icon {
+    z-index: 10000;
+}
