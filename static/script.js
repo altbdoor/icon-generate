@@ -72,11 +72,12 @@ function fixIconPlacement(adjustTop=0, adjustLeft=0) {
 }
 
 function exportImage() {
-    fixCanvasSize(true)
+    fixCanvasSize(reset=true)
+    const canvasSize = parseInt($('#canvas-size').val())
 
     domtoimage.toPng($('#output-canvas')[0], {
-        width: 2048,
-        height: 2048,
+        width: canvasSize,
+        height: canvasSize,
     }).then(function (dataUrl) {
         window.open(dataUrl)
         fixCanvasSize()
@@ -96,6 +97,8 @@ function generateIconImage() {
     }
 
     return promise.then(() => {
+        const canvasSize = parseInt($('#canvas-size').val())
+
         const iconBg = hexToRgb($('#icon-bg').val())
         const iconBgOpacity = $('#icon-bg-opacity').val()
         const iconFg = $('#icon-fg').val()
@@ -107,8 +110,11 @@ function generateIconImage() {
         const iconLeft = $('#icon-left').val()
 
         $('#output-canvas').css({
+            'width': `${canvasSize}px`,
+            'height': `${canvasSize}px`,
             'border-radius': `${iconRound}px`,
         })
+        fixCanvasSize()
 
         $('#output-canvas-background').css({
             'background-color': `rgba(${iconBg.r}, ${iconBg.g}, ${iconBg.b}, ${iconBgOpacity})`,
@@ -187,8 +193,6 @@ $('#generate-form-download').on('click', () => {
         exportImage()
     })
 })
-
-fixCanvasSize()
 
 getFontAwesomeJSON().then((r) => {
     $('#generate-form').trigger('submit')
