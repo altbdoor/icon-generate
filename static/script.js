@@ -12,22 +12,25 @@ function getFontAwesomeSVG(glyphName) {
         let icon = null
         let svg = null
 
-        for (let key in r.icons) {
-            if (key === glyphName) {
-                icon = r.icons[key]
-                break
-            }
+        if (glyphName in r.icons) {
+            icon = r.icons[glyphName]
         }
 
         if (icon) {
             svg = $(document.createElement('svg'))
             $(svg).html(icon.body).attr({
+                'xmlns': 'http://www.w3.org/2000/svg',
                 'width': (icon.width || r.width),
                 'height': (icon.height || r.height),
             })
 
             $(svg).children('path').removeAttr('fill')
             svg = $(svg).prop('outerHTML')
+
+            // var xml = new XMLSerializer().serializeToString($('#output-canvas-icon > svg')[0]);
+            // let x = 'data:image/svg+xml;base64,' + btoa(svg)
+            // $('<img/>').attr('src', x).appendTo($('body'))
+            // console.log(xml)
         }
 
         return svg
@@ -108,6 +111,7 @@ function generateIconImage() {
         const iconScale = $('#icon-scale').val()
         const iconTop = $('#icon-top').val()
         const iconLeft = $('#icon-left').val()
+        const iconRotate = $('#icon-rotate').val()
 
         $('#output-canvas').css({
             'width': `${canvasSize}px`,
@@ -122,13 +126,28 @@ function generateIconImage() {
         })
 
         $('#output-canvas-icon').css({
-            'transform': `scale(${iconScale})`,
+            'transform': `scale(${iconScale}) rotate(${iconRotate}deg)`,
         }).find('path').attr({
             'fill': `#${iconFg}`,
             'fill-opacity': iconFgOpacity,
         })
 
         fixIconPlacement(parseInt(iconTop), parseInt(iconLeft))
+
+        // let shadowFilter = ''
+        // for (let i=0; i<10; i+=1) {
+        //     let spread = 0
+
+        //     if (i > 0) {
+        //         spread = 1
+        //     }
+
+        //     shadowFilter += `drop-shadow(${i}px ${i}px ${spread}px #aaa) `
+        // }
+        // console.log(shadowFilter)
+        // $('#output-canvas-icon svg').css({
+        //     'filter': shadowFilter,
+        // })
     })
 }
 
