@@ -2,9 +2,24 @@ function getFontAwesomeJSON() {
     const version = '5f201aca'
     const url = `https://cdn.rawgit.com/simplesvg/icons/${version}/json/fa.json`
 
-    return fetch(url).then((r) => {
-        return r.json()
-    })
+    const defer = $.Deferred()
+
+    const cacheKey = `fa-${version}`
+    const cacheJson = localStorage.getItem(cacheKey)
+
+    if (cacheJson) {
+        defer.resolve(JSON.parse(cacheJson))
+    }
+    else {
+        fetch(url).then((r) => {
+            return r.text()
+        }).then((ajaxData) => {
+            localStorage.setItem(cacheKey, ajaxData)
+            defer.resolve(JSON.parse(ajaxData))
+        })
+    }
+
+    return defer.promise()
 }
 
 function getFontAwesomeSVG(glyphName) {
@@ -24,141 +39,159 @@ function getFontAwesomeSVG(glyphName) {
                 'height': (icon.height || r.height),
             })
 
-            $(svg).children('path').removeAttr('fill')
             svg = $(svg).prop('outerHTML')
-
-            // var xml = new XMLSerializer().serializeToString($('#output-canvas-icon > svg')[0]);
-            // let x = 'data:image/svg+xml;base64,' + btoa(svg)
-            // $('<img/>').attr('src', x).appendTo($('body'))
-            // console.log(xml)
         }
 
         return svg
     })
 }
 
-function setCanvasFontAwesomeIcon(glyphName) {
-    return getFontAwesomeSVG(glyphName).then((svg) => {
-        if (svg) {
-            $('#output-canvas-icon').html(svg)
+getFontAwesomeJSON().then((r) => {
+    $('#generate-form').trigger('submit')
+    let choiceHtml = ''
+
+    for (let key in r.icons) {
+        choiceHtml += `<option value="${key}">`
+    }
+
+    $('#fontawesome-choice').append(choiceHtml)
+})
+
+function generateCanvasImage (settings) {
+    const outputCanvas = $('#output-canvas')[0]
+    const outputCtx = outputCanvas.getContext('2d')
+    outputCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height)
+
+    const canvasSize = parseInt(settings.size)
+    const canvasPadding = parseInt(settings.padding)
+
+    outputCanvas.width = canvasSize
+    outputCanvas.height = canvasSize
+
+    outputCtx.globalAlpha = Number(settings.bg.alpha)
+    if (outputCtx.globalAlpha > 0) {
+        // roundrect seems to not work with X/Y
+        outputCtx.translate(canvasPadding, canvasPadding)
+        const roundRectSize = canvasSize - (canvasPadding * 2)
+        roundRect(outputCtx, 0, 0, roundRectSize, roundRectSize, settings.bg.round)
+        outputCtx.translate(canvasPadding * -1, canvasPadding * -1)
+
+        outputCtx.globalCompositeOperation = 'source-over'
+        outputCtx.fillStyle = `#${settings.bg.color}`
+        outputCtx.fill()
+    }
+
+    const canvasParentWidth = $(outputCanvas).parent().width()
+    const factor = canvasParentWidth / outputCanvas.width
+
+    $(outputCanvas).css('transform', `scale(${factor})`)
+
+    const scopedDefer = $.when()
+    return scopedDefer.then(() => {
+        const defer = $.Deferred()
+
+        const hiddenContainer = $('#hidden-container')
+        $(hiddenContainer).html(settings.svgStr)
+
+        const svg = $(hiddenContainer).children('svg').first()
+        $(svg).find('path').attr('fill', `#${settings.fg.color}`)
+
+        // fix because firefox just dies when svg no dimension attributes
+        if ((!$(svg).attr('width') || !$(svg).attr('height')) && $(svg).attr('viewBox')) {
+            const viewboxAttr = $(svg).attr('viewBox').split(' ')
+            $(svg).attr('width', viewboxAttr[2])
+            $(svg).attr('height', viewboxAttr[3])
         }
-        else {
-            alert(`Glyph "${glyphName}" not found!`)
+
+        const svgXml = new XMLSerializer().serializeToString($(svg)[0])
+        const svgB64 = 'data:image/svg+xml;base64,' + btoa(svgXml)
+
+        const svgImg = new Image()
+        svgImg.onload = function () {
+            const canvas = document.createElement('canvas')
+            const svgScale = Number(settings.fg.scale)
+            const svgWidth = (svgImg.width * 2 * svgScale)
+            const svgHeight = (svgImg.height * 2 * svgScale)
+
+            const maxDimension = Math.max(svgWidth, svgHeight)
+            canvas.width = maxDimension * 2
+            canvas.height = maxDimension * 2
+
+            const centerImgX = (canvas.width - svgWidth) / 2
+            const centerImgY = (canvas.height - svgHeight) / 2
+
+            const ctx = canvas.getContext('2d')
+            const angle = parseInt(settings.fg.angle) * Math.PI / 180
+
+            // https://stackoverflow.com/questions/3793397/html5-canvas-drawimage-with-at-an-angle
+            ctx.translate(maxDimension + parseInt(settings.fg.adjustX), maxDimension + parseInt(settings.fg.adjustY))
+            ctx.rotate(angle)
+
+            const newSvgPosX = (svgWidth / 2 * -1)
+            const newSvgPosY = (svgHeight / 2 * -1)
+
+            ctx.drawImage(svgImg, newSvgPosX, newSvgPosY, svgWidth, svgHeight)
+            // ctx.rotate(angle * -1)
+            // ctx.translate(svgWidth * -1, svgHeight * -1)
+
+            const pngImgSrc = canvas.toDataURL('image/png')
+            defer.resolve(pngImgSrc)
         }
+        svgImg.src = svgB64
+
+        return defer.promise()
+
+    }).then((pngImgSrc) => {
+        const pngImg = new Image()
+        pngImg.onload = function () {
+            const resizePngWidth = pngImg.width / 2
+            const resizePngHeight = pngImg.height / 2
+            const centerImgX = (outputCanvas.width - resizePngWidth) / 2
+            const centerImgY = (outputCanvas.height - resizePngHeight) / 2
+
+            const shadowSingleCanvas = document.createElement('canvas')
+            const shadowSingleCtx = shadowSingleCanvas.getContext('2d')
+            shadowSingleCanvas.width = resizePngWidth
+            shadowSingleCanvas.height = resizePngHeight
+
+            // https://stackoverflow.com/questions/43447959/html5-canvasis-there-a-way-to-use-multiple-shadows-on-image
+            shadowSingleCtx.globalCompositeOperation = 'source-over'
+            shadowSingleCtx.fillStyle = `#${settings.shadow.color}`
+            shadowSingleCtx.fillRect(0, 0, shadowSingleCanvas.width, shadowSingleCanvas.height)
+            shadowSingleCtx.globalCompositeOperation = 'destination-in'
+            shadowSingleCtx.drawImage(pngImg, 0, 0, resizePngWidth, resizePngHeight)
+
+            const shadowFullCanvas = document.createElement('canvas')
+            const shadowFullCtx = shadowFullCanvas.getContext('2d')
+            shadowFullCanvas.width = outputCanvas.width
+            shadowFullCanvas.height = outputCanvas.height
+
+            // https://code.tutsplus.com/tutorials/creating-a-jquery-plugin-for-long-shadow-design--cms-28924
+            const shadowAngle = parseInt(settings.shadow.angle) * Math.PI / 180
+            const shadowCount = parseInt(settings.shadow.count)
+            for (let i=0.5; i<shadowCount; i+=0.5) {
+                const x = Math.round(i * Math.cos(shadowAngle))
+                const y = Math.round(i * Math.sin(shadowAngle))
+
+                shadowFullCtx.drawImage(shadowSingleCanvas, centerImgX + x, centerImgY + y)
+            }
+
+            let iconCompositeOperation = 'source-atop'
+            if (Number(settings.bg.alpha) == 0) {
+                iconCompositeOperation = 'source-over'
+            }
+
+            outputCtx.globalAlpha = Number(settings.shadow.alpha)
+            outputCtx.globalCompositeOperation = iconCompositeOperation
+            outputCtx.drawImage(shadowFullCanvas, 0, 0)
+
+            outputCtx.globalAlpha = Number(settings.fg.alpha)
+            outputCtx.globalCompositeOperation = iconCompositeOperation
+            outputCtx.drawImage(pngImg, centerImgX, centerImgY, resizePngWidth, resizePngHeight)
+        }
+        pngImg.src = pngImgSrc
     })
-}
 
-function fixCanvasSize(reset=false) {
-    const canvas = $('#output-canvas')
-    let factor = 1
-
-    if (!reset) {
-        const canvasWidth = $(canvas).outerWidth()
-        const canvasParentWidth = $(canvas).parent().width()
-        factor = canvasParentWidth / canvasWidth
-    }
-
-    $(canvas).css('transform', `scale(${factor})`)
-}
-
-function fixIconPlacement(adjustTop=0, adjustLeft=0) {
-    const canvas = $('#output-canvas')
-    const icon = $('#output-canvas-icon')
-
-    adjustTop += (($(canvas).outerHeight() - $(icon).outerHeight()) / 2)
-    adjustLeft += (($(canvas).outerWidth() - $(icon).outerWidth()) / 2)
-
-    $(icon).css({
-        'margin-top': `${adjustTop}px`,
-        'margin-left': `${adjustLeft}px`,
-    })
-}
-
-function exportImage() {
-    fixCanvasSize(reset=true)
-    const canvasSize = parseInt($('#canvas-size').val())
-
-    domtoimage.toPng($('#output-canvas')[0], {
-        width: canvasSize,
-        height: canvasSize,
-    }).then(function (dataUrl) {
-        window.open(dataUrl)
-        fixCanvasSize()
-    })
-}
-
-function generateIconImage() {
-    const iconImg = $('#icon-img').data('svg')
-    let promise = $.when()
-
-    if (iconImg) {
-        $('#output-canvas-icon').html(iconImg)
-    }
-    else {
-        const iconGlyph = $('#icon-glyph').val()
-        promise = setCanvasFontAwesomeIcon(iconGlyph)
-    }
-
-    return promise.then(() => {
-        const canvasSize = parseInt($('#canvas-size').val())
-
-        const iconBg = hexToRgb($('#icon-bg').val())
-        const iconBgOpacity = $('#icon-bg-opacity').val()
-        const iconFg = $('#icon-fg').val()
-        const iconFgOpacity = $('#icon-fg-opacity').val()
-
-        const iconRound = $('#icon-round').val()
-        const iconScale = $('#icon-scale').val()
-        const iconTop = $('#icon-top').val()
-        const iconLeft = $('#icon-left').val()
-        const iconRotate = $('#icon-rotate').val()
-
-        $('#output-canvas').css({
-            'width': `${canvasSize}px`,
-            'height': `${canvasSize}px`,
-            'border-radius': `${iconRound}px`,
-        })
-        fixCanvasSize()
-
-        $('#output-canvas-background').css({
-            'background-color': `rgba(${iconBg.r}, ${iconBg.g}, ${iconBg.b}, ${iconBgOpacity})`,
-            'border-radius': `${iconRound}px`,
-        })
-
-        $('#output-canvas-icon').css({
-            'transform': `scale(${iconScale}) rotate(${iconRotate}deg)`,
-        }).find('path').attr({
-            'fill': `#${iconFg}`,
-            'fill-opacity': iconFgOpacity,
-        })
-
-        fixIconPlacement(parseInt(iconTop), parseInt(iconLeft))
-
-        // let shadowFilter = ''
-        // for (let i=0; i<10; i+=1) {
-        //     let spread = 0
-
-        //     if (i > 0) {
-        //         spread = 1
-        //     }
-
-        //     shadowFilter += `drop-shadow(${i}px ${i}px ${spread}px #aaa) `
-        // }
-        // console.log(shadowFilter)
-        // $('#output-canvas-icon svg').css({
-        //     'filter': shadowFilter,
-        // })
-    })
-}
-
-// https://stackoverflow.com/a/5624139/6616962
-function hexToRgb(hex) {
-    var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16)
-    } : null;
 }
 
 $('#icon-img').on('change', () => {
@@ -168,7 +201,7 @@ $('#icon-img').on('change', () => {
         const file = elem.files[0]
         const reader = new FileReader()
 
-        reader.onload = function(e) {
+        reader.onload = function (e) {
             try {
                 const parser = new DOMParser()
                 const xmldoc = parser.parseFromString(e.target.result, 'text/xml')
@@ -202,24 +235,84 @@ $('#icon-img-reset').on('click', () => {
 
 $('#generate-form').on('submit', (e) => {
     e.preventDefault()
-    return generateIconImage()
+
+    const iconImg = $('#icon-img').data('svg')
+    const iconGlyph = $('#icon-glyph').val()
+
+    const svgDefer = $.Deferred()
+
+    if (iconImg) {
+        svgDefer.resolve(iconImg)
+    }
+    else {
+        getFontAwesomeSVG(iconGlyph).then((svgStr) => {
+            if (svgStr) {
+                svgDefer.resolve(svgStr)
+            }
+            else {
+                alert(`Glyph "${iconGlyph}" not found!`)
+                svgDefer.reject()
+            }
+        })
+    }
+
+    return svgDefer.then((svgStr) => {
+        const canvasSetting = {
+            svgStr: svgStr,
+            size: $('#canvas-size').val(),
+            padding: $('#canvas-padding').val(),
+            bg: {
+                color: $('#icon-bg-color').val(),
+                alpha: $('#icon-bg-alpha').val(),
+                round: $('#icon-bg-round').val(),
+            },
+            fg: {
+                color: $('#icon-fg-color').val(),
+                alpha: $('#icon-fg-alpha').val(),
+                scale: $('#icon-fg-scale').val(),
+                angle: $('#icon-fg-rotate').val(),
+                adjustX: $('#icon-fg-left').val(),
+                adjustY: $('#icon-fg-top').val(),
+            },
+            shadow: {
+                color: $('#icon-shadow-color').val(),
+                alpha: $('#icon-shadow-alpha').val(),
+                angle: $('#icon-shadow-rotate').val(),
+                count: $('#icon-shadow-count').val(),
+            },
+        }
+
+        return generateCanvasImage(canvasSetting)
+    })
+
 }).on('reset', () => {
     $('#icon-img').trigger('custom-reset')
 })
 
 $('#generate-form-download').on('click', () => {
-    $('#generate-form').triggerHandler('submit').then(() => {
-        exportImage()
-    })
+    const outputCanvas = $('#output-canvas')[0]
+    const pngImgSrc = outputCanvas.toDataURL('image/png')
+
+    const link = $(document.createElement('a'))
+
+    $(link).attr({
+        href: pngImgSrc,
+        download: 'export.png',
+    }).addClass('d-none').appendTo(document.body)
+
+    $(link)[0].click()
+    $(link).remove()
 })
 
-getFontAwesomeJSON().then((r) => {
-    $('#generate-form').trigger('submit')
-    let choiceHtml = ''
-
-    for (let key in r.icons) {
-        choiceHtml += `<option value="${key}">`
-    }
-
-    $('#fontawesome-choice').append(choiceHtml)
-})
+// https://stackoverflow.com/a/7838871/6616962
+function roundRect (ctx, x, y, w, h, r) {
+    if (w < 2 * r) r = w / 2;
+    if (h < 2 * r) r = h / 2;
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y,   x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x,   y+h, r);
+    ctx.arcTo(x,   y+h, x,   y,   r);
+    ctx.arcTo(x,   y,   x+w, y,   r);
+    ctx.closePath();
+}

@@ -4,6 +4,11 @@ body {
 
 #canvas-container {
     overflow: hidden;
+
+}
+
+#output-canvas-container {
+    overflow: hidden;
     width: 360px;
     height: 360px;
 
@@ -14,24 +19,5 @@ body {
 
 #output-canvas {
     display: block;
-    position: relative;
     transform-origin: top left;
-    overflow: hidden;
-    background-clip: padding-box;
-}
-
-#output-canvas > * {
-    position: absolute;
-    top: 0;
-    left: 0;
-}
-
-#output-canvas-background {
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-}
-
-#output-canvas-icon {
-    z-index: 10000;
 }
