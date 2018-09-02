@@ -61,25 +61,13 @@ function generateCanvasImage (settings) {
     const outputCanvas = $('#output-canvas')[0]
     const outputCtx = outputCanvas.getContext('2d')
     outputCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height)
+    outputCtx.globalCompositeOperation = 'source-over'
 
     const canvasSize = parseInt(settings.size)
     const canvasPadding = parseInt(settings.padding)
 
     outputCanvas.width = canvasSize
     outputCanvas.height = canvasSize
-
-    outputCtx.globalAlpha = Number(settings.bg.alpha)
-    if (outputCtx.globalAlpha > 0) {
-        // roundrect seems to not work with X/Y
-        outputCtx.translate(canvasPadding, canvasPadding)
-        const roundRectSize = canvasSize - (canvasPadding * 2)
-        roundRect(outputCtx, 0, 0, roundRectSize, roundRectSize, settings.bg.round)
-        outputCtx.translate(canvasPadding * -1, canvasPadding * -1)
-
-        outputCtx.globalCompositeOperation = 'source-over'
-        outputCtx.fillStyle = `#${settings.bg.color}`
-        outputCtx.fill()
-    }
 
     const canvasParentWidth = $(outputCanvas).parent().width()
     const factor = canvasParentWidth / outputCanvas.width
@@ -176,18 +164,40 @@ function generateCanvasImage (settings) {
                 shadowFullCtx.drawImage(shadowSingleCanvas, centerImgX + x, centerImgY + y)
             }
 
-            let iconCompositeOperation = 'source-atop'
-            if (Number(settings.bg.alpha) == 0) {
-                iconCompositeOperation = 'source-over'
-            }
+            // prepare background
+            const bgCanvas = cloneCanvas(outputCanvas)
+            const bgCtx = bgCanvas.getContext('2d')
 
+            // roundrect seems to not work with X/Y
+            const roundRectSize = canvasSize - (canvasPadding * 2)
+            bgCtx.globalCompositeOperation = 'source-over'
+
+            bgCtx.translate(canvasPadding, canvasPadding)
+            roundRect(bgCtx, 0, 0, roundRectSize, roundRectSize, settings.bg.round)
+            bgCtx.translate(canvasPadding * -1, canvasPadding * -1)
+
+            bgCtx.fillStyle = `#${settings.bg.color}`
+            bgCtx.fill()
+
+            // paint the background
+            outputCtx.globalAlpha = Number(settings.bg.alpha)
+            outputCtx.drawImage(bgCanvas, 0, 0)
+
+            // paint the shadow
+            const shadowCanvas = cloneCanvas(bgCanvas)
+            const shadowCtx = shadowCanvas.getContext('2d')
+            shadowCtx.globalCompositeOperation = 'source-in'
+            shadowCtx.drawImage(shadowFullCanvas, 0, 0)
             outputCtx.globalAlpha = Number(settings.shadow.alpha)
-            outputCtx.globalCompositeOperation = iconCompositeOperation
-            outputCtx.drawImage(shadowFullCanvas, 0, 0)
+            outputCtx.drawImage(shadowCanvas, 0, 0)
 
+            // paint the icon
+            const iconCanvas = cloneCanvas(bgCanvas)
+            const iconCtx = iconCanvas.getContext('2d')
+            iconCtx.globalCompositeOperation = 'source-in'
+            iconCtx.drawImage(pngImg, centerImgX, centerImgY, resizePngWidth, resizePngHeight)
             outputCtx.globalAlpha = Number(settings.fg.alpha)
-            outputCtx.globalCompositeOperation = iconCompositeOperation
-            outputCtx.drawImage(pngImg, centerImgX, centerImgY, resizePngWidth, resizePngHeight)
+            outputCtx.drawImage(iconCanvas, 0, 0)
         }
         pngImg.src = pngImgSrc
     })
@@ -315,4 +325,21 @@ function roundRect (ctx, x, y, w, h, r) {
     ctx.arcTo(x,   y+h, x,   y,   r);
     ctx.arcTo(x,   y,   x+w, y,   r);
     ctx.closePath();
+}
+
+// https://stackoverflow.com/a/8306028/6616962
+function cloneCanvas(oldCanvas) {
+    //create a new canvas
+    var newCanvas = document.createElement('canvas');
+    var context = newCanvas.getContext('2d');
+
+    //set dimensions
+    newCanvas.width = oldCanvas.width;
+    newCanvas.height = oldCanvas.height;
+
+    //apply the old canvas to the new one
+    context.drawImage(oldCanvas, 0, 0);
+
+    //return the new canvas
+    return newCanvas;
 }
