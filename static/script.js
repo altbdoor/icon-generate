@@ -1,6 +1,6 @@
 function getFontAwesomeJSON() {
-    const version = '5f201aca'
-    const url = `https://cdn.rawgit.com/simplesvg/icons/${version}/json/fa.json`
+    const version = '5f201acac998f19cb14f59afd039bc57b1785c54'
+    const url = `https://cdn.jsdelivr.net/gh/simplesvg/icons@${version}/json/fa.json`
 
     const defer = $.Deferred()
 
